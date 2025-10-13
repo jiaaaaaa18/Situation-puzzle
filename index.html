@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>猜謎遊戲</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 20px; background: #f7f7f7; }
+  h1 { color: #333; }
+  #riddle { font-size: 20px; margin-bottom: 10px; }
+  #response { margin-top: 10px; color: green; font-weight: bold; }
+  #answer { padding: 5px; font-size: 16px; }
+  button { padding: 5px 10px; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<h1>猜謎遊戲</h1>
+<div id="riddle">等待 AI 出題...</div>
+<input type="text" id="answer" placeholder="輸入你的答案">
+<button onclick="submitAnswer()">提交</button>
+<div id="response"></div>
+
+<script>
+let riddles = [
+  { q: "身穿黃衣裳，肚裡水汪汪", a: "西瓜" },
+  { q: "一匹馬，兩條腿，沒有尾巴不會飛", a: "椅子" },
+  { q: "小小白白飛來飛去，春天一到就見它", a: "雪花" }
+];
+
+let currentRiddle = null;
+
+function newRiddle() {
+  const index = Math.floor(Math.random() * riddles.length);
+  currentRiddle = riddles[index];
+  document.getElementById("riddle").innerText = currentRiddle.q;
+  document.getElementById("response").innerText = "";
+  document.getElementById("answer").value = "";
+}
+
+// 初始化第一題
+newRiddle();
+
+function submitAnswer() {
+  const userAnswer = document.getElementById("answer").value.trim();
+
+  if (!userAnswer) {
+    alert("請先輸入答案！");
+    return;
+  }
+
+  // 假判斷，之後可以改成呼叫後端 Ollama
+  if (userAnswer === currentRiddle.a) {
+    document.getElementById("response").innerText = "正確！🎉";
+  } else {
+    document.getElementById("response").innerText = "錯誤，答案是：" + currentRiddle.a;
+  }
+
+  // 下一題延遲 2 秒自動出現
+  setTimeout(newRiddle, 2000);
+}
+</script>
+
+</body>
+</html>
