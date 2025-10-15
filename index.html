@@ -1,24 +1,138 @@
-<script>
-// 這裡設定 Ollama 的伺服器位置
-// 本機測試時用 localhost；若用 ngrok 就改成 ngrok 給的網址，例如：
-// const OLLAMA_API = "https://abc123.ngrok.io/api/generate";
-const OLLAMA_API = "https://unarguable-untampered-gil.ngrok-free.dev";
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>海龜湯猜謎遊戲</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background: #f0f5f9;
+    text-align: center;
+  }
+  h1 {
+    color: #333;
+    margin-bottom: 10px;
+  }
+  #start-screen, #game-screen {
+    display: none;
+  }
+  #start-screen.active, #game-screen.active {
+    display: block;
+  }
+  button {
+    padding: 10px 20px;
+    font-size: 18px;
+    margin-top: 15px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background-color: #007bff;
+    color: white;
+    transition: 0.3s;
+  }
+  button:hover {
+    background-color: #0056b3;
+  }
+  #riddle {
+    font-size: 20px;
+    margin-top: 20px;
+    min-height: 60px;
+  }
+  #response {
+    margin-top: 10px;
+    color: green;
+    font-weight: bold;
+  }
+  #answer {
+    padding: 5px;
+    font-size: 16px;
+    margin-top: 10px;
+  }
+  .explanation {
+    margin-top: 20px;
+    padding: 15px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    text-align: left;
+  }
+  .loading {
+    color: gray;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
 
-// 儲存目前的題目與答案
+<h1>🥣 海龜湯猜謎遊戲</h1>
+
+<!-- ✅ 開始畫面 -->
+<div id="start-screen" class="active">
+  <p>歡迎來到海龜湯遊戲！</p>
+  <p>AI 會出懸疑的情境題，請你透過推理回答背後真相！</p>
+  <button onclick="startGame()">開始遊戲</button>
+</div>
+
+<!-- ✅ 遊戲畫面 -->
+<div id="game-screen">
+  <div id="riddle" class="loading">等待 AI 出題中...</div>
+  <input type="text" id="answer" placeholder="輸入你的答案">
+  <br>
+  <button onclick="submitAnswer()">提交</button>
+  <div id="response"></div>
+
+  <div class="explanation">
+    <h3>📘 海龜湯說明：</h3>
+    <p>海龜湯是一種推理遊戲。出題者會給出一個奇怪的情境，
+       玩家要不斷提出問題或推理出真相。  
+       在這裡，AI 會自動出題，請你嘗試回答它背後的原因！</p>
+  </div>
+</div>
+
+<script>
+// ===============================
+// 🔧 設定 Ollama 伺服器位置
+// ===============================
+// 若在本機執行：保持 http://localhost:11434
+// 若使用 ngrok，改成例如： "https://abc123.ngrok.io/api/generate"
+const OLLAMA_API = "https://unarguable-untampered-gil.ngrok-free.dev ";
+
+// ===============================
+// 🧩 遊戲邏輯
+// ===============================
 let currentRiddle = { q: "", a: "" };
 
-// 叫 Ollama 出題
+// ✅ 打字動畫（讓出題文字一個字一個字出現）
+function typeWriterEffect(element, text, speed = 30) {
+  element.innerHTML = "";
+  let i = 0;
+  function type() {
+    if (i < text.length) {
+      element.innerHTML += text.charAt(i);
+      i++;
+      setTimeout(type, speed);
+    }
+  }
+  type();
+}
+
+// ✅ 請 Ollama 出題
 async function newRiddle() {
-  document.getElementById("riddle").innerText = "🧠 AI 正在出題中...";
-  document.getElementById("response").innerText = "";
-  document.getElementById("answer").value = "";
+  const riddleEl = document.getElementById("riddle");
+  const responseEl = document.getElementById("response");
+  const answerInput = document.getElementById("answer");
+
+  riddleEl.innerText = "🧠 AI 正在出題中...";
+  responseEl.innerText = "";
+  answerInput.value = "";
 
   const prompt = `
-  你是一個海龜湯出題者，請生成一個有趣、懸疑但合邏輯的海龜湯題目。
-  格式如下：
+  你是一個海龜湯遊戲的出題者。請生成一個有趣、懸疑、但邏輯合理的題目。
+  格式：
   題目：xxxx
   答案：xxxx
-  不要多餘文字。
+  不要加入任何多餘的說明或文字。
   `;
 
   try {
@@ -31,7 +145,6 @@ async function newRiddle() {
       })
     });
 
-    // Ollama 是以串流回傳的，我們把它完整讀出
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let fullText = "";
@@ -42,32 +155,30 @@ async function newRiddle() {
       fullText += decoder.decode(value);
     }
 
-    // 從回傳文字中取出題目與答案
     const match = fullText.match(/題目[:：](.*)\n*答案[:：](.*)/);
     if (match) {
       currentRiddle.q = match[1].trim();
       currentRiddle.a = match[2].trim();
     } else {
-      currentRiddle.q = "AI 出題失敗，請再試一次。";
+      currentRiddle.q = "AI 出題失敗，請重試。";
       currentRiddle.a = "";
     }
 
-    document.getElementById("riddle").innerText = currentRiddle.q;
+    typeWriterEffect(riddleEl, currentRiddle.q);
   } catch (err) {
     console.error(err);
-    document.getElementById("riddle").innerText =
-      "⚠️ 無法連線到 Ollama，請確認是否有執行 ollama serve 或設定 ngrok URL。";
+    riddleEl.innerText = "⚠️ 無法連線到 Ollama，請確認是否執行中。";
   }
 }
 
-// 開始遊戲
+// ✅ 開始遊戲
 function startGame() {
   document.getElementById("start-screen").classList.remove("active");
   document.getElementById("game-screen").classList.add("active");
   newRiddle();
 }
 
-// 使用者提交答案
+// ✅ 提交答案並用 Ollama 判斷
 async function submitAnswer() {
   const userAnswer = document.getElementById("answer").value.trim();
   const responseBox = document.getElementById("response");
@@ -79,12 +190,11 @@ async function submitAnswer() {
 
   responseBox.textContent = "AI 判斷中...";
 
-  // 呼叫 Ollama 判斷玩家答案是否正確
   const checkPrompt = `
   題目：「${currentRiddle.q}」
   正確答案：「${currentRiddle.a}」
-  使用者的回答：「${userAnswer}」
-  請只回答「正確」或「錯誤」，不需要多餘說明。
+  使用者回答：「${userAnswer}」
+  請只回答「正確」或「錯誤」，不要加任何其他文字。
   `;
 
   try {
@@ -113,10 +223,13 @@ async function submitAnswer() {
       responseBox.textContent = "❌ 錯誤。正確答案是：「" + currentRiddle.a + "」。";
     }
 
-    setTimeout(newRiddle, 3000);
+    setTimeout(newRiddle, 4000);
   } catch (err) {
     console.error(err);
-    responseBox.textContent = "⚠️ 判斷失敗，請檢查 Ollama 是否運行中。";
+    responseBox.textContent = "⚠️ 無法連線到 Ollama。";
   }
 }
 </script>
+
+</body>
+</html>
