@@ -1,67 +1,122 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-<meta charset="UTF-8">
-<title>猜謎遊戲</title>
-<style>
-  body { font-family: Arial, sans-serif; padding: 20px; background: #f7f7f7; }
-  h1 { color: #333; }
-  #riddle { font-size: 20px; margin-bottom: 10px; }
-  #response { margin-top: 10px; color: green; font-weight: bold; }
-  #answer { padding: 5px; font-size: 16px; }
-  button { padding: 5px 10px; font-size: 16px; }
-</style>
-</head>
-<body>
-
-<h1>猜謎遊戲</h1>
-<div id="riddle">等待 AI 出題...</div>
-<input type="text" id="answer" placeholder="輸入你的答案">
-<button onclick="submitAnswer()">提交</button>
-<div id="response"></div>
-
 <script>
-let riddles = [
-  { q: "身穿黃衣裳，肚裡水汪汪你好啊", a: "西瓜" },
-  { q: "一匹馬，兩條腿，沒有尾巴不會飛", a: "椅子" },
-  { q: "小小白白飛來飛去，春天一到就見它", a: "雪花" }
-];
+// 這裡設定 Ollama 的伺服器位置
+// 本機測試時用 localhost；若用 ngrok 就改成 ngrok 給的網址，例如：
+// const OLLAMA_API = "https://abc123.ngrok.io/api/generate";
+const OLLAMA_API = "https://unarguable-untampered-gil.ngrok-free.dev";
 
-let currentRiddle = null;
+// 儲存目前的題目與答案
+let currentRiddle = { q: "", a: "" };
 
-function newRiddle() {
-  const index = Math.floor(Math.random() * riddles.length);
-  currentRiddle = riddles[index];
-  document.getElementById("riddle").innerText = currentRiddle.q;
+// 叫 Ollama 出題
+async function newRiddle() {
+  document.getElementById("riddle").innerText = "🧠 AI 正在出題中...";
   document.getElementById("response").innerText = "";
   document.getElementById("answer").value = "";
+
+  const prompt = `
+  你是一個海龜湯出題者，請生成一個有趣、懸疑但合邏輯的海龜湯題目。
+  格式如下：
+  題目：xxxx
+  答案：xxxx
+  不要多餘文字。
+  `;
+
+  try {
+    const res = await fetch(OLLAMA_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama3.2",
+        prompt: prompt
+      })
+    });
+
+    // Ollama 是以串流回傳的，我們把它完整讀出
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let fullText = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      fullText += decoder.decode(value);
+    }
+
+    // 從回傳文字中取出題目與答案
+    const match = fullText.match(/題目[:：](.*)\n*答案[:：](.*)/);
+    if (match) {
+      currentRiddle.q = match[1].trim();
+      currentRiddle.a = match[2].trim();
+    } else {
+      currentRiddle.q = "AI 出題失敗，請再試一次。";
+      currentRiddle.a = "";
+    }
+
+    document.getElementById("riddle").innerText = currentRiddle.q;
+  } catch (err) {
+    console.error(err);
+    document.getElementById("riddle").innerText =
+      "⚠️ 無法連線到 Ollama，請確認是否有執行 ollama serve 或設定 ngrok URL。";
+  }
 }
 
-// 初始化第一題
-newRiddle();
+// 開始遊戲
+function startGame() {
+  document.getElementById("start-screen").classList.remove("active");
+  document.getElementById("game-screen").classList.add("active");
+  newRiddle();
+}
 
-function submitAnswer() {
+// 使用者提交答案
+async function submitAnswer() {
   const userAnswer = document.getElementById("answer").value.trim();
+  const responseBox = document.getElementById("response");
 
   if (!userAnswer) {
     alert("請先輸入答案！");
     return;
   }
 
-  // 假判斷，之後可以改成呼叫後端 Ollama
-  if (userAnswer === currentRiddle.a) {
-    document.getElementById("response").innerText = "正確！🎉";
-  } else {
-    document.getElementById("response").innerText = "錯誤，答案是：" + currentRiddle.a;
-  }
+  responseBox.textContent = "AI 判斷中...";
 
-  // 下一題延遲 2 秒自動出現
-  setTimeout(newRiddle, 2000);
+  // 呼叫 Ollama 判斷玩家答案是否正確
+  const checkPrompt = `
+  題目：「${currentRiddle.q}」
+  正確答案：「${currentRiddle.a}」
+  使用者的回答：「${userAnswer}」
+  請只回答「正確」或「錯誤」，不需要多餘說明。
+  `;
+
+  try {
+    const res = await fetch(OLLAMA_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama3.2",
+        prompt: checkPrompt
+      })
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let fullText = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      fullText += decoder.decode(value);
+    }
+
+    if (fullText.includes("正確")) {
+      responseBox.textContent = "✅ 答對了！太棒了！";
+    } else {
+      responseBox.textContent = "❌ 錯誤。正確答案是：「" + currentRiddle.a + "」。";
+    }
+
+    setTimeout(newRiddle, 3000);
+  } catch (err) {
+    console.error(err);
+    responseBox.textContent = "⚠️ 判斷失敗，請檢查 Ollama 是否運行中。";
+  }
 }
 </script>
-
-</body>
-</html>
-
-
-
